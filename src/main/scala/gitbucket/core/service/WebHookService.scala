@@ -1,7 +1,7 @@
 package gitbucket.core.service
 
 import gitbucket.core.api._
-import gitbucket.core.model.{WebHook, Account, Issue, PullRequest, IssueComment}
+import gitbucket.core.model.{WebHook, Account, Issue, PullRequest, IssueComment, CommitComment}
 import gitbucket.core.model.Profile._
 import profile.simple._
 import gitbucket.core.util.JGitUtil.CommitInfo
@@ -157,6 +157,20 @@ trait WebHookPullRequestService extends WebHookService {
       callWebHook("pull_request", webHooks, payload)
     }
   }
+
+  def callPullRequestReivewCommentWebHook(repository: RepositoryService.RepositoryInfo, issueId: Int, comment: CommitComment)(implicit s: Session, context:JsonFormat.Context): Unit = {
+    import WebHookService._
+
+    callWebHookOf(repository.owner, repository.name, "pull_request_review_comment"){
+      for{
+        (_, pullRequest) <- getPullRequest(repository.owner, repository.name, issueId)
+      } yield {
+        WebHookPullRequestReviewCommentPayload(
+            pullRequest = pullRequest,
+            comment     = comment)
+      }
+    }
+  }
 }
 
 trait WebHookIssueCommentService extends WebHookPullRequestService {
@@ -275,5 +289,23 @@ object WebHookService {
         issue        = ApiIssue(issue, RepositoryName(repository), ApiUser(issueUser)),
         comment      = ApiComment(comment, RepositoryName(repository), issue.issueId, ApiUser(commentUser)),
         sender       = ApiUser(sender))
+  }
+
+  // https://developer.github.com/v3/activity/events/types/#pullrequestreviewcommentevent
+  case class WebHookPullRequestReviewCommentPayload(
+    action: String,
+    pullRequest: PullRequest,
+    comment: CommitComment
+  ) extends WebHookPayload
+
+  object WebHookPullRequestReviewCommentPayload{
+    def apply(
+        pullRequest: PullRequest,
+        comment: CommitComment): WebHookPullRequestReviewCommentPayload =
+      WebHookPullRequestReviewCommentPayload(
+        action      = "created",
+        pullRequest = pullRequest,
+        comment     = comment
+      )
   }
 }
