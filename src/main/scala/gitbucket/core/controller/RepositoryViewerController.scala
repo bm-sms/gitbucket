@@ -70,6 +70,14 @@ trait RepositoryViewerControllerBase extends ControllerBase {
     issueId: Option[Int]
   )
 
+  case class ReviewCommentForm(
+    fileName: Option[String],
+    oldLineNumber: Option[Int],
+    newLineNumber: Option[Int],
+    content: String,
+    commitId: String
+  )
+
   val editorForm = mapping(
     "branch"        -> trim(label("Branch", text(required))),
     "path"          -> trim(label("Path", text())),
@@ -95,6 +103,14 @@ trait RepositoryViewerControllerBase extends ControllerBase {
     "content"       -> trim(label("Content", text(required))),
     "issueId"       -> trim(label("Issue Id", optional(number())))
   )(CommentForm.apply)
+
+  val reviewCommentForm = mapping(
+    "fileName"      -> trim(label("Filename", optional(text()))),
+    "oldLineNumber" -> trim(label("Old line number", optional(number()))),
+    "newLineNumber" -> trim(label("New line number", optional(number()))),
+    "content"       -> trim(label("Content", text(required))),
+    "commitId"      -> text()
+  )(ReviewCommentForm.apply)
 
   /**
    * Returns converted HTML from Markdown for preview.
@@ -328,13 +344,23 @@ trait RepositoryViewerControllerBase extends ControllerBase {
 
   post("/:owner/:repository/commit/:id/comment/new", commentForm)(readableUsersOnly { (form, repository) =>
     val id = params("id")
-    createCommitComment(repository.owner, repository.name, id, context.loginAccount.get.userName, form.content,
+    val commentId = createCommitComment(repository.owner, repository.name, id, context.loginAccount.get.userName, form.content,
       form.fileName, form.oldLineNumber, form.newLineNumber, form.issueId.isDefined)
     form.issueId match {
       case Some(issueId) => recordCommentPullRequestActivity(repository.owner, repository.name, context.loginAccount.get.userName, issueId, form.content)
       case None => recordCommentCommitActivity(repository.owner, repository.name, context.loginAccount.get.userName, id, form.content)
     }
     redirect(s"/${repository.owner}/${repository.name}/commit/${id}")
+  })
+
+  ajaxPost("/:owner/:repository/pull/:issueId/review_comment/create", reviewCommentForm)(readableUsersOnly { (form, repository) =>
+    val issueId = params("issueId").toInt
+    val commentId = createCommitComment(repository.owner, repository.name, form.commitId, context.loginAccount.get.userName, form.content,
+      form.fileName, form.oldLineNumber, form.newLineNumber, true)
+
+    recordCommentCommitActivity(repository.owner, repository.name, context.loginAccount.get.userName, form.commitId, form.content)
+    callPullRequestReivewCommentWebHook(repository, issueId, getCommitComment(repository.owner, repository.name, commentId.toString).get)
+    redirect(s"/${repository.owner}/${repository.name}/commit/${form.commitId}")
   })
 
   ajaxGet("/:owner/:repository/commit/:id/comment/_form")(readableUsersOnly { repository =>
