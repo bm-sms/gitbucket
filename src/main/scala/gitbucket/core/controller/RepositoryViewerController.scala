@@ -357,10 +357,12 @@ trait RepositoryViewerControllerBase extends ControllerBase {
     val issueId = params("issueId").toInt
     val commentId = createCommitComment(repository.owner, repository.name, form.commitId, context.loginAccount.get.userName, form.content,
       form.fileName, form.oldLineNumber, form.newLineNumber, true)
+    val comment = getCommitComment(repository.owner, repository.name, commentId.toString).get
 
     recordCommentCommitActivity(repository.owner, repository.name, context.loginAccount.get.userName, form.commitId, form.content)
-    callPullRequestReivewCommentWebHook(repository, issueId, getCommitComment(repository.owner, repository.name, commentId.toString).get)
-    redirect(s"/${repository.owner}/${repository.name}/commit/${form.commitId}")
+    callPullRequestReivewCommentWebHook(repository, issueId, comment)
+
+    helper.html.commitcomment(comment, hasWritePermission(repository.owner, repository.name, context.loginAccount), repository)
   })
 
   ajaxGet("/:owner/:repository/commit/:id/comment/_form")(readableUsersOnly { repository =>
