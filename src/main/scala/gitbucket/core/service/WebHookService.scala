@@ -1,7 +1,7 @@
 package gitbucket.core.service
 
 import gitbucket.core.api._
-import gitbucket.core.model.{WebHook, Account, Issue, PullRequest, IssueComment, CommitComment}
+import gitbucket.core.model.{WebHook, Account, Issue, PullRequest, IssueComment, Comment}
 import gitbucket.core.model.Profile._
 import profile.simple._
 import gitbucket.core.util.JGitUtil.CommitInfo
@@ -158,17 +158,24 @@ trait WebHookPullRequestService extends WebHookService {
     }
   }
 
-  def callPullRequestReivewCommentWebHook(repository: RepositoryService.RepositoryInfo, issueId: Int, comment: CommitComment)(implicit s: Session, context:JsonFormat.Context): Unit = {
+  def callPullRequestReivewCommentWebHook(requestRepository: RepositoryService.RepositoryInfo, requestBranch: String, baseUrl: String, comment: Comment, sender: Account)(implicit s: Session, context:JsonFormat.Context): Unit = {
     import WebHookService._
 
-    callWebHookOf(repository.owner, repository.name, "pull_request_review_comment"){
-      for{
-        (_, pullRequest) <- getPullRequest(repository.owner, repository.name, issueId)
-      } yield {
-        WebHookPullRequestReviewCommentPayload(
-            pullRequest = pullRequest,
-            comment     = comment)
-      }
+    for{
+      ((issue, issueUser, pullRequest, baseOwner, headOwner), webHooks) <- getPullRequestsByRequestForWebhook(requestRepository.owner, requestRepository.name, requestBranch)
+      baseRepo <- getRepository(pullRequest.userName, pullRequest.repositoryName, baseUrl)
+    } yield {
+      val payload = WebHookPullRequestReviewCommentPayload(
+        issue           = issue,
+        issueUser       = issueUser,
+        pullRequest     = pullRequest,
+        headRepository  = requestRepository,
+        headOwner       = headOwner,
+        baseRepository  = baseRepo,
+        baseOwner       = baseOwner,
+        comment         = comment,
+        commentUser     = sender)
+      callWebHook("pull_request_review_comment", webHooks, payload)
     }
   }
 }
@@ -294,18 +301,27 @@ object WebHookService {
   // https://developer.github.com/v3/activity/events/types/#pullrequestreviewcommentevent
   case class WebHookPullRequestReviewCommentPayload(
     action: String,
-    pullRequest: PullRequest,
-    comment: CommitComment
+    pull_request: ApiPullRequest,
+    comment: ApiComment
   ) extends WebHookPayload
 
   object WebHookPullRequestReviewCommentPayload{
     def apply(
+        issue: Issue,
+        issueUser: Account,
         pullRequest: PullRequest,
-        comment: CommitComment): WebHookPullRequestReviewCommentPayload =
+        headRepository: RepositoryInfo,
+        headOwner: Account,
+        baseRepository: RepositoryInfo,
+        baseOwner: Account,
+        comment: Comment,
+        commentUser: Account): WebHookPullRequestReviewCommentPayload = {
+      val headRepoPayload = ApiRepository(headRepository, headOwner)
+      val baseRepoPayload = ApiRepository(baseRepository, baseOwner)
       WebHookPullRequestReviewCommentPayload(
-        action      = "created",
-        pullRequest = pullRequest,
-        comment     = comment
-      )
+        action        = "created",
+        pull_request  = ApiPullRequest(issue, pullRequest, headRepoPayload, baseRepoPayload, ApiUser(issueUser)),
+        comment       = ApiComment(comment, RepositoryName(headRepository), issue.issueId, ApiUser(commentUser)))
+    }
   }
 }

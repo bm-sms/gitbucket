@@ -1,6 +1,6 @@
 package gitbucket.core.api
 
-import gitbucket.core.model.IssueComment
+import gitbucket.core.model.Comment
 import gitbucket.core.util.RepositoryName
 
 import java.util.Date
@@ -19,7 +19,7 @@ case class ApiComment(
 }
 
 object ApiComment{
-  def apply(comment: IssueComment, repositoryName: RepositoryName, issueId: Int, user: ApiUser): ApiComment =
+  def apply(comment: Comment, repositoryName: RepositoryName, issueId: Int, user: ApiUser): ApiComment =
     ApiComment(
       id = comment.commentId,
       user = user,

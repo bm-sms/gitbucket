@@ -1,8 +1,11 @@
 package gitbucket.core.model
 
 trait Comment {
+  val commentId: Int
   val commentedUserName: String
+  val content: String
   val registeredDate: java.util.Date
+  val updatedDate: java.util.Date
 }
 
 trait IssueCommentComponent extends TemplateComponent { self: Profile =>
